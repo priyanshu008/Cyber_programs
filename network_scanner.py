@@ -10,23 +10,38 @@ def get_arguments():
     if not options.target:
         parser.error("[-] Please specify a target IP or IP range, use --help")
     return options
-
 def scan(ip):
-    # Create an ARP request for the given IP/IP range
-    arp_request = scapy.ARP(pdst=ip)
-    # Create a broadcast Ethernet frame to send to all devices on the LAN
-    broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
-    # Stack Ethernet + ARP
-    arp_request_broadcast = broadcast / arp_request
-    # Send packet and receive responses (timeout=1s, no verbose output)
-    answered_list = scapy.srp(arp_request_broadcast, timeout=1, verbose=False)[0]
+    try:
+        arp_request = scapy.ARP(pdst=ip)
+        broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
+        arp_request_broadcast = broadcast / arp_request
 
-    client_list = []
-    # Extract IP and MAC from each response
-    for element in answered_list:
-        client_dict = {"ip": element[1].psrc, "mac": element[1].hwsrc}
-        client_list.append(client_dict)
-    return client_list
+        answered_list = scapy.srp(
+            arp_request_broadcast,
+            timeout=1,
+            verbose=False
+        )[0]
+
+        client_list = []
+        for element in answered_list:
+            client_dict = {
+                "ip": element[1].psrc,
+                "mac": element[1].hwsrc
+            }
+            client_list.append(client_dict)
+
+        return client_list
+
+    except PermissionError:
+        print("\n[!] Permission denied.")
+        print("[!] Run this script as root:")
+        print("    sudo python3 network_scanner.py -t <target>")
+        exit(1)
+
+    except Exception as e:
+        print(f"\n[!] Scan failed: {e}")
+        return []
+
 
 def print_result(results_list):
     print("IP\t\t\tMAC Address\n-----------------------------------------")
@@ -35,5 +50,14 @@ def print_result(results_list):
         print(f"{client['ip']:<16} {client['mac']}")
 
 options = get_arguments()
-scan_result = scan(options.target)
-print_result(scan_result)
+
+try:
+    scan_result = scan(options.target)
+
+    if not scan_result:
+        print("\n[-] No hosts found or scan failed.")
+    else:
+        print_result(scan_result)
+
+except KeyboardInterrupt:
+    print("\n[!] Scan interrupted by user. Exiting.")
