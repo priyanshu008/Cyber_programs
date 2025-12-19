@@ -27,10 +27,27 @@ def get_arguments():
 # Function: Start sniffing packets on a specific interface
 
 def sniff(interface):
-    # scapy.sniff() listens on the specified network interface
-    # store=False means packets are not saved in memory
-    # prn specifies a callback function that runs for each captured packet
-    scapy.sniff(iface=interface, store=False, prn=process_sniffed_packet)
+    try:
+        scapy.sniff(
+            iface=interface,
+            store=False,
+            prn=process_sniffed_packet
+        )
+
+    except PermissionError:
+        print("\n[!] Permission denied.")
+        print("[!] Packet sniffing requires root privileges.")
+        print("[!] Run using: sudo python3 packet_sniffer.py -i <interface>")
+        exit(1)
+
+    except OSError as e:
+        print(f"\n[!] OS error: {e}")
+        print("[!] Check if the interface name is correct.")
+        exit(1)
+
+    except Exception as e:
+        print(f"\n[!] Unexpected error: {e}")
+        exit(1)
 
 
 # Function: Extract the requested URL from an HTTP request packet
@@ -70,8 +87,10 @@ def process_sniffed_packet(packet):
 # Main entry point
 
 if __name__ == "__main__":
-    # Get the network interface from user input
     args = get_arguments()
-    
-    # Start sniffing on the specified interface
-    sniff(args.interface)
+
+    try:
+        sniff(args.interface)
+
+    except KeyboardInterrupt:
+        print("\n[!] Sniffing stopped by user. Exiting cleanly.")
